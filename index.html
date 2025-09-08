@@ -86,35 +86,18 @@
       </div>
     </section>
 
-    <!-- TABLA -->
+    <!-- PESTAÑAS -->
     <section class="card table-card">
-      <div class="table-scroller">
-        <table id="tabla">
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Fecha</th>
-              <th>B/N</th>
-              <th>Color</th>
-              <th>Anillado</th>
-              <th>Precio</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+      <div style="display:flex; gap:12px; padding:12px;">
+        <button class="tab-btn btn-secondary" data-tab="tabla">Ventas</button>
+        <button class="tab-btn btn-secondary" data-tab="actividades">Actividades por mes</button>
       </div>
-      <div class="totales">
-        <div>
-          Total acumulado: $ <span id="total">0,00</span>
-          <br /><small>Se guarda automáticamente en este navegador</small>
-        </div>
-        <div>
-          <small id="contador"></small>
-        </div>
+
+      <div id="tab-contenido">
+    <!-- Contenido dinámico -->
       </div>
     </section>
-  </div>
+
 
   <script>
     // --- Utilidades ---
@@ -229,6 +212,80 @@
       const f = document.getElementById('fecha');
       if (!f.value) f.value = iso;
     }
+    // --- Función para renderizar actividades por mes ---
+    function renderActividades() {
+      const cont = document.getElementById('tab-contenido');
+      cont.innerHTML = '';
+
+      if (!ventas.length) {
+        cont.innerHTML = '<p style="padding:12px;">No hay ventas registradas aún.</p>';
+        return;
+      }
+
+      // Agrupar por año-mes
+      const meses = {};
+      for (const v of ventas) {
+        const [year, month] = v.fecha.split('-');
+        const key = `${year}-${month}`;
+        if (!meses[key]) meses[key] = [];
+        meses[key].push(v);
+      }
+
+      // Ordenar meses descendente
+      const keys = Object.keys(meses).sort((a,b) => b.localeCompare(a));
+
+      for (const key of keys) {
+        const [year, month] = key.split('-');
+        const nombreMes = new Date(year, month-1).toLocaleString('es-AR', { month:'long', year:'numeric' });
+
+        const table = document.createElement('table');
+        table.style.width = '100%';
+        table.style.borderCollapse = 'collapse';
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Nombre</th><th>Fecha</th><th>B/N</th><th>Color</th><th>Anillado</th><th>Precio</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${meses[key].map(v => `
+              <tr>
+                <td>${escapeHtml(v.nombre)}</td>
+                <td>${fmtFecha(v.fecha)}</td>
+                <td>${v.hojas_bn}</td>
+                <td>${v.hojas_color}</td>
+                <td>${v.anillado?'Sí':'No'}</td>
+                <td>$ ${toARS(v.precio)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        `;
+
+        const divMes = document.createElement('div');
+        divMes.innerHTML = `<h3 style="margin:12px 0 6px;">${nombreMes}</h3>`;
+        divMes.appendChild(table);
+        cont.appendChild(divMes);
+      }
+    }
+// Manejo de pestañas
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    // reseteamos estilos
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('btn-primary'));
+    btn.classList.add('btn-primary');
+
+    const tab = btn.getAttribute('data-tab');
+    if(tab==='tabla') {
+      // mostramos tabla principal
+      document.getElementById('tab-contenido').innerHTML = document.getElementById('tabla')?.outerHTML || '';
+    } else if(tab==='actividades') {
+      renderActividades();
+    }
+  });
+});
+
+// Inicializar mostrando tabla
+document.querySelector('.tab-btn[data-tab="tabla"]').click();
 
     // --- Inicializar ---
     document.getElementById('btnAgregar').addEventListener('click', agregar);
