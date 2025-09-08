@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Registro de Ventas - Fotocopiadora</title>
+  <style>
+    :root { --card:#fff; --bg:#f6f7fb; --text:#222; --muted:#6b7280; --border:#e5e7eb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; background: var(--bg); color: var(--text); }
+    header { padding: 20px; text-align: center; }
+    h1 { margin: 0; font-size: 1.6rem; }
+
+    .wrap { max-width: 980px; margin: 0 auto 48px; padding: 0 16px; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 8px 20px rgba(0,0,0,.04); }
+
+    form { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px 14px; padding: 16px; }
+    form .full { grid-column: 1 / -1; }
+    label { font-size: .86rem; color: var(--muted); display: block; margin-bottom: 6px; }
+    input[type="text"], input[type="number"], input[type="date"] { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 1rem; background: #fff; }
+    .check { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 16px 16px; }
+    button { border: 0; padding: 10px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+    .btn-primary { background: #111827; color: #fff; }
+    .btn-secondary { background: #e5e7eb; }
+    .btn-danger { background: #ef4444; color: #fff; }
+
+    .table-card { margin-top: 18px; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { text-align: left; font-size: .8rem; color: var(--muted); padding: 10px 8px; border-bottom: 1px solid var(--border); }
+    tbody td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tbody tr:hover { background: #fafafa; }
+
+    .totales { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px 18px; font-weight: 700; }
+    .totales small { font-weight: 500; color: var(--muted); }
+
+    @media (max-width: 720px) {
+      form { grid-template-columns: 1fr; }
+      .table-scroller { overflow-x: auto; }
+      table { min-width: 760px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="wrap">
+    <h1>📑 Registro de Ventas – Fotocopiadora</h1>
+    <p style="margin:.4rem 0 0;color:#6b7280">Guarde sus pedidos y vea el total acumulado. (Versión local: datos en este navegador)</p>
+  </header>
+
+  <div class="wrap">
+    <!-- FORMULARIO -->
+    <section class="card">
+      <form id="ventaForm" autocomplete="off">
+        <div>
+          <label for="nombre">Nombre del pedido</label>
+          <input id="nombre" type="text" placeholder="Ej: Juan Pérez – Apuntes" required />
+        </div>
+        <div>
+          <label for="fecha">Fecha</label>
+          <input id="fecha" type="date" required />
+        </div>
+        <div>
+          <label for="hojas_bn">Hojas Blanco y Negro</label>
+          <input id="hojas_bn" type="number" min="0" step="1" value="0" required />
+        </div>
+        <div>
+          <label for="hojas_color">Hojas a Color</label>
+          <input id="hojas_color" type="number" min="0" step="1" value="0" required />
+        </div>
+        <div class="full">
+          <div class="check">
+            <input id="anillado" type="checkbox" />
+            <label for="anillado" style="margin:0">Anillado</label>
+          </div>
+        </div>
+        <div class="full">
+          <label for="precio">Precio total ($)</label>
+          <input id="precio" type="number" min="0" step="0.01" placeholder="Ej: 2500" required />
+        </div>
+      </form>
+      <div class="actions">
+        <button id="btnAgregar" class="btn-primary">Agregar venta</button>
+        <button id="btnLimpiar" class="btn-secondary" title="Borra todos los datos de este navegador">Vaciar todo</button>
+      </div>
+    </section>
+
+    <!-- TABLA -->
+    <section class="card table-card">
+      <div class="table-scroller">
+        <table id="tabla">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Fecha</th>
+              <th>B/N</th>
+              <th>Color</th>
+              <th>Anillado</th>
+              <th>Precio</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="totales">
+        <div>
+          Total acumulado: $ <span id="total">0,00</span>
+          <br /><small>Se guarda automáticamente en este navegador</small>
+        </div>
+        <div>
+          <small id="contador"></small>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // --- Utilidades ---
+    const $ = (sel) => document.querySelector(sel);
+    const toARS = (n) => Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const STORAGE_KEY = 'ventas_fotocopiadora_v1';
+
+    // --- Estado ---
+    /** @type {Array<{id:string,nombre:string,fecha:string,hojas_bn:number,hojas_color:number,anillado:boolean,precio:number}>} */
+    let ventas = [];
+
+    function cargar() {
+      try {
+        ventas = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      } catch {
+        ventas = [];
+      }
+    }
+    function guardar() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(ventas));
+    }
+
+    // --- Render ---
+    function render() {
+      const tbody = $('#tabla tbody');
+      tbody.innerHTML = '';
+      let total = 0;
+
+      // Ordenar por fecha descendente
+      const ordenadas = [...ventas].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+
+      for (const v of ordenadas) {
+        total += Number(v.precio) || 0;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(v.nombre)}</td>
+          <td>${fmtFecha(v.fecha)}</td>
+          <td>${v.hojas_bn}</td>
+          <td>${v.hojas_color}</td>
+          <td>${v.anillado ? 'Sí' : 'No'}</td>
+          <td>$ ${toARS(v.precio)}</td>
+          <td><button class="btn-danger" data-id="${v.id}">Borrar</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+      $('#total').textContent = toARS(total);
+      $('#contador').textContent = `${ordenadas.length} venta${ordenadas.length === 1 ? '' : 's'}`;
+
+      // eventos de borrar
+      tbody.querySelectorAll('button[data-id]').forEach(btn => {
+        btn.addEventListener('click', () => borrar(btn.getAttribute('data-id')));
+      });
+    }
+
+    function fmtFecha(iso) {
+      if (!iso) return '';
+      try { return new Date(iso + 'T00:00:00').toLocaleDateString('es-AR'); } catch { return iso; }
+    }
+
+    function escapeHtml(str='') {
+      return String(str).replace(/[&<>"]+/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s]));
+    }
+
+    // --- Acciones ---
+    function agregar() {
+      const nombre = $('#nombre').value.trim();
+      const fecha = $('#fecha').value; // yyyy-mm-dd
+      const hojas_bn = parseInt($('#hojas_bn').value || '0', 10);
+      const hojas_color = parseInt($('#hojas_color').value || '0', 10);
+      const anillado = $('#anillado').checked;
+      const precio = parseFloat($('#precio').value || '0');
+
+      if (!nombre || !fecha || isNaN(hojas_bn) || isNaN(hojas_color) || isNaN(precio)) {
+        alert('Complete todos los campos correctamente.');
+        return;
+      }
+      if (precio < 0 || hojas_bn < 0 || hojas_color < 0) {
+        alert('Los valores no pueden ser negativos.');
+        return;
+      }
+
+      ventas.push({
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2,7),
+        nombre, fecha, hojas_bn, hojas_color, anillado, precio
+      });
+      guardar();
+      render();
+      // limpiar
+      $('#ventaForm').reset();
+      setDefaultDate();
+      $('#nombre').focus();
+    }
+
+    function borrar(id) {
+      if (!confirm('¿Borrar esta venta?')) return;
+      ventas = ventas.filter(v => v.id !== id);
+      guardar();
+      render();
+    }
+
+    function vaciar() {
+      if (!ventas.length) return;
+      if (!confirm('Esto borrará TODAS las ventas almacenadas en este navegador.')) return;
+      ventas = [];
+      guardar();
+      render();
+    }
+
+    function setDefaultDate() {
+      const hoy = new Date();
+      const iso = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString().slice(0,10);
+      const f = document.getElementById('fecha');
+      if (!f.value) f.value = iso;
+    }
+
+    // --- Inicializar ---
+    document.getElementById('btnAgregar').addEventListener('click', agregar);
+    document.getElementById('btnLimpiar').addEventListener('click', vaciar);
+    cargar();
+    setDefaultDate();
+    render();
+  </script>
+</body>
+</html>
